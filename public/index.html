@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+  <meta charset="UTF-8">
+  <title>LEGOMIL</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+  <script src="https://unpkg.com/alpinejs" defer></script>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    h1 { text-align: center; margin-bottom: 5px; }
+    .input-section { text-align: center; margin: 30px 0; }
+    .input-section input { font-size: 1.6em; padding: 12px; margin-right: 20px; width: 240px; }
+    .input-section button { font-size: 1.6em; padding: 12px 24px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, 200px); gap: 1rem; }
+    .card { border: 1px solid #ccc; padding: 10px; text-align: center; position: relative; }
+    img { max-width: 100%; height: 120px; object-fit: cover; }
+    .delete-btn { position: absolute; top: 5px; right: 5px; background: none; color: black; border: none; padding: 4px; cursor: pointer; opacity: 0.3; }
+    .delete-btn:hover { opacity: 0.8; }
+    .delete-btn svg { width: 16px; height: 16px; }
+    .card h3 a { color: inherit; text-decoration: none; }
+    .card h3 a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body x-data="legoApp()" x-init="loadSets()">
+
+  <h1>LEGOMIL</h1>
+  <p style="text-align: center; margin-top: -5px; color: #666;">Ukupno setova: <span x-text="sets.length"></span></p>
+
+  <div class="input-section">
+    <input type="text" x-model="newSet" placeholder="Unesi LEGO broj" @keydown.enter="addSet()">
+    <button @click="addSet()">Dodaj set</button>
+  </div>
+
+  <div class="grid">
+    <template x-for="set in sets" :key="set.set_number">
+      <div class="card">
+        <button class="delete-btn" @click="deleteSet(set.set_number)">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-trash">
+            <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+            <path d="M4 7l16 0" />
+            <path d="M10 11l0 6" />
+            <path d="M14 11l0 6" />
+            <path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" />
+            <path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" />
+          </svg>
+        </button>
+        <img :src="set.image_url" alt="">
+        <h3><a :href="`https://rebrickable.com/sets/${set.set_number}/`" target="_blank" x-text="set.name"></a></h3>
+        <p><b>Godina:</b> <span x-text="set.year"></span></p>
+      </div>
+    </template>
+  </div>
+
+<script>
+function legoApp() {
+  return {
+    sets: [],
+    newSet: "",
+    async loadSets() {
+      const res = await fetch("/sets");
+      this.sets = await res.json();
+    },
+    async addSet() {
+      if (!this.newSet) return;
+      const res = await fetch(`/addSet/${this.newSet}`, { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        this.sets.push({
+          set_number: data.set.set_num,
+          name: data.set.name,
+          year: data.set.year,
+          theme: data.set.theme_id,
+          image_url: data.set.set_img_url
+        });
+        this.newSet = "";
+      } else {
+        alert("Greška: " + data.error);
+      }
+    },
+    async deleteSet(setNumber) {
+      if (!confirm(`Da li si siguran da želiš da obrišeš set ${setNumber}?`)) {
+        return;
+      }
+      
+      const res = await fetch(`/deleteSet/${setNumber}`, { method: "DELETE" });
+      const data = await res.json();
+      
+      if (data.success) {
+        this.sets = this.sets.filter(set => set.set_number !== setNumber);
+      } else {
+        alert("Greška: " + data.error);
+      }
+    }
+  }
+}
+</script>
+</body>
+</html>
