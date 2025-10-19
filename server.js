@@ -3,6 +3,7 @@ import fetch from "node-fetch";
 import fs from "fs";
 import path from "path";
 import dotenv from "dotenv";
+import session from "express-session";
 
 dotenv.config();
 
@@ -10,9 +11,57 @@ const app = express();
 const PORT = 3005;
 const DATA_DIR = "./data";
 const API_KEY = process.env.REBRICKABLE_API_KEY;
+const AUTH_USERNAME = process.env.AUTH_USERNAME;
+const AUTH_PASSWORD = process.env.AUTH_PASSWORD;
+const SESSION_SECRET = process.env.SESSION_SECRET;
 
+// Session middleware
+app.use(session({
+  secret: SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: false, // set to true if using HTTPS directly
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
+}));
+
+app.use(express.json());
 app.use(express.static("public"));
 app.use("/data", express.static("data")); // Serviranje slika iz data foldera
+
+// Authentication middleware
+const requireAuth = (req, res, next) => {
+  if (req.session && req.session.authenticated) {
+    return next();
+  }
+  return res.status(401).json({ success: false, error: "Niste prijavljeni" });
+};
+
+// Login endpoint
+app.post("/login", (req, res) => {
+  const { username, password } = req.body;
+
+  if (username === AUTH_USERNAME && password === AUTH_PASSWORD) {
+    req.session.authenticated = true;
+    req.session.username = username;
+    return res.json({ success: true, message: "Uspešno ste se prijavili" });
+  }
+
+  return res.status(401).json({ success: false, error: "Pogrešno korisničko ime ili lozinka" });
+});
+
+// Logout endpoint
+app.post("/logout", (req, res) => {
+  req.session.destroy();
+  res.json({ success: true, message: "Uspešno ste se odjavili" });
+});
+
+// Check auth status
+app.get("/auth-status", (req, res) => {
+  res.json({ authenticated: req.session && req.session.authenticated });
+});
 
 // GET svi setovi
 app.get("/sets", (req, res) => {
@@ -52,8 +101,8 @@ app.get("/sets", (req, res) => {
   res.json(sets);
 });
 
-// POST dodavanje novog seta
-app.post("/addSet/:number", async (req, res) => {
+// POST dodavanje novog seta (zaštićeno autentikacijom)
+app.post("/addSet/:number", requireAuth, async (req, res) => {
   const number = req.params.number;
   const url = `https://rebrickable.com/api/v3/lego/sets/${number}-1/`;
 
@@ -111,8 +160,8 @@ image_url: ${localImageUrl || data.set_img_url}
   }
 });
 
-// DELETE brisanje seta
-app.delete("/deleteSet/:number", (req, res) => {
+// DELETE brisanje seta (zaštićeno autentikacijom)
+app.delete("/deleteSet/:number", requireAuth, (req, res) => {
   const number = req.params.number;
   const setFolder = path.join(DATA_DIR, number);
 
