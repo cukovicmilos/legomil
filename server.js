@@ -4,6 +4,7 @@ import fs from "fs";
 import path from "path";
 import dotenv from "dotenv";
 import session from "express-session";
+import sharp from "sharp";
 
 dotenv.config();
 
@@ -27,9 +28,17 @@ app.use(session({
   }
 }));
 
+const CACHE_DURATION = 15552000; // 6 months in seconds
+
 app.use(express.json());
 app.use(express.static("public"));
-app.use("/data", express.static("data")); // Serviranje slika iz data foldera
+app.use("/data", express.static("data", {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.webp')) {
+      res.setHeader('Cache-Control', `public, max-age=${CACHE_DURATION}`);
+    }
+  }
+}));
 
 // Authentication middleware
 const requireAuth = (req, res, next) => {
@@ -120,16 +129,20 @@ app.post("/addSet/:number", requireAuth, async (req, res) => {
       fs.mkdirSync(setFolder, { recursive: true });
     }
 
-    // Preuzmi sliku i sačuvaj lokalno
     let localImageUrl = "";
     if (data.set_img_url) {
       const imageResp = await fetch(data.set_img_url);
       if (imageResp.ok) {
         const imageBuffer = await imageResp.arrayBuffer();
-        const ext = path.extname(new URL(data.set_img_url).pathname) || '.jpg';
-        const imagePath = path.join(setFolder, `image${ext}`);
-        fs.writeFileSync(imagePath, Buffer.from(imageBuffer));
-        localImageUrl = `/data/${data.set_num}/image${ext}`;
+        const inputBuffer = Buffer.from(imageBuffer);
+        const imagePath = path.join(setFolder, 'image.webp');
+        
+        await sharp(inputBuffer)
+          .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
+          .webp({ quality: 85 })
+          .toFile(imagePath);
+        
+        localImageUrl = `/data/${data.set_num}/image.webp`;
       }
     }
 
